@@ -1,0 +1,334 @@
+---
+title: "P8105_hw3_rc3521"
+author: "Runze Cui"
+date: "2022-10-11"
+output: github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(p8105.datasets)
+library(patchwork)
+library(ggridges)
+```
+
+## Problem 1
+
+```{r}
+data("instacart")
+instacart
+```
+
+Description for dataset `instacart` : This dataset has 1,384,617 rows and 15 columns (1,384,617 observations and 15 variables). The `instacart` dataset illustrate an online grocery service in New York City. Several key variables are listed such as `order_id` and `product_id`. It records the type of food which are ordered. The specific name of products are also clarified in `product_name`. And `department` lists which apartment the ordered products are belong to in each observation. 
+
+Now, I am going to answer the questions:
+
+Question 1:
+
+```{r}
+instacart %>% 
+  janitor::clean_names() %>% 
+  distinct(aisle) %>% 
+  nrow()
+
+instacart %>% 
+  group_by(aisle) %>% 
+  summarize(n_obs = n()) %>% 
+  mutate(aisle_ranking = min_rank(desc(n_obs))) %>% 
+  filter(aisle_ranking == 1) 
+```
+
+So there are 134 distinct aisles and the the most items ordered should be *Fresh vegetables*
+
+
+
+Question 2:
+
+Make a plot based on aisle:
+
+```{r}
+instacart %>%
+  group_by(aisle, department) %>% 
+  summarize(n_obs = n()) %>%
+  arrange(desc(n_obs)) %>%
+  rename(no_items = n_obs) %>% 
+  filter(no_items > 10000) %>% 
+  mutate(as.numeric(no_items)) %>% 
+  ggplot(aes(x = reorder(aisle, no_items), y = no_items, fill = department)) +  
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text = element_text(size = 8) ) +
+  theme(
+    legend.title = element_text(size = 6), 
+    legend.text = element_text(size = 6),
+    legend.background = element_rect(fill = "white", size = 0.5),
+    legend.position = "right") +
+  labs(
+    title = "Items ordered in each aisle",
+    x = "Aisle",
+    y = "The number of products",
+  ) 
+```
+
+Question 3: 
+
+Make a table to show three most popular items in each of the aisles "baking ingradients", "dog food care", and "packaged vegetables fruits." Include the number of times for each item is ordered in the table.
+
+```{r}
+instacart %>% 
+  filter(aisle %in% c("baking ingredients", "dog food care", "packaged vegetables fruits")) %>%
+  group_by(aisle) %>% 
+  count(product_name) %>% 
+  mutate(rank = min_rank(desc(n))) %>% 
+  filter(rank < 4) %>% 
+  arrange(desc(n)) %>%
+  knitr::kable()
+```
+
+
+Question 4:
+
+Another table
+
+```{r}
+instacart %>% 
+  filter(product_name %in% c("Pink Lady Apples", "Coffee Ice Cream")) %>% 
+  group_by(product_name, order_dow) %>%
+  summarize(mean_time = round(mean(order_hour_of_day), digits = 1)) %>% 
+  pivot_wider(
+    names_from = "order_dow",
+    values_from = "mean_time") %>%
+  knitr::kable(digits = 1)
+```
+
+
+## Problem 2
+
+load and tidy the data
+
+```{r}
+accel_df = 
+  read_csv("hw3_data/accel_data.csv") %>%
+  pivot_longer(
+    cols = activity.1:activity.1440,
+    names_to = "activity",
+    values_to = "activity_counts"
+  ) %>% 
+  mutate(
+    week_section = recode(day,
+      "Friday" = "Weekday",
+      "Monday" = "Weekday",
+      "Tuesday" = "Weekday",
+      "Wednesday" = "Weekday",
+      "Thursday" = "Weekday",
+      "Saturday" = "Weekend",
+      "Sunday" = "Weekend"
+    )) %>% 
+  janitor::clean_names() %>% 
+   separate(activity, into = c("activity", "activity_minute")) %>%
+  mutate(
+    activity_minute = as.numeric(activity_minute),
+    day = fct_relevel(day, c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+    ) %>%
+  select(-activity)
+nrow(accel_df)
+ncol(accel_df)
+```
+Describe the resulting dataset:
+In current version of `accel_df` dataset, we get 6 variables in total. `week`, `day_id` and `day` columns provide the week ID and what day of this week for each observations from Monday to Sunday. And we set Monday, Tuesday, Wednesday, Thursday and Friday as weekday, and call Saturday and Sunday as weekend. This information is also recorded in column `week_section`. Also, `activity_number` and `activity_counts` also let us know which observation we are looking and related accelerometer data. In general, this dataset contains 50400 observations in total. 
+
+
+
+Now, we do traditional analysis for the dataset
+```{r}
+accel_df %>% 
+  group_by(day_id, day, week_section) %>% 
+  summarize(day_counts = sum(activity_counts)) %>% 
+  knitr::kable()
+```
+We need to draw some plots to determine the trends
+
+We can create a histogram plot based on which day of the week and daily accelerometer data counts.
+
+```{r}
+accel_df %>%
+  group_by(day) %>%
+  summarize(day_counts = sum(activity_counts)) %>% 
+  ggplot(aes(x = day, y = day_counts, fill = day)) + 
+  geom_histogram(stat = "identity") + 
+  labs(
+    x = "Day/Week",
+    y = "Activity Counts/Day",
+    title = "Accelerometer Daily Activity Counts By Day"
+  ) + 
+  theme(
+    legend.position = "bottom"
+  )
+```
+
+```{r}
+accel_df %>%
+  group_by(day_id) %>%
+  summarize(day_counts = sum(activity_counts)) %>% 
+  ggplot(aes(x = day_id, y = day_counts, fill = day_id)) + 
+  geom_histogram(stat = "identity") +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Accelerometer Daily Activity Counts",
+    x = "Day Number",
+    y = "Activity Counts"
+  )
+```
+
+
+Trends Observation based on two plots above:
+From plot 1 and we can know Saturday recorded the lowest activity counts, while Monday recorded the highest counts.And from plot 2, the trend line shows that at the beginning of this study, the activity counts are higher than last couple of days. 
+
+
+Making a single panel plots:
+```{r}
+accel_df %>%  
+  ggplot(aes(x = activity_minute, y = activity_counts, color = day)) + 
+  geom_line() +
+  labs(
+    title = "24hr Activity Count Per Day",
+    x = "Time",
+    y = "Activity Counts"
+  ) + 
+  scale_x_continuous(
+    breaks = c(0, 360, 720, 1080, 1440), 
+    labels = c("12AM", "6AM", "12PM", "6PM", "11:59PM"),
+    limits = c(0, 1440)
+    )
+```
+
+Description of the panel plots:
+During 12-6AM, activity is the lowest probably because this is sleeping time, while the activity counts up to the highest at 8-10 pm for weekday, and around 12pm for weekend. 
+
+
+## Problem 3
+
+```{r}
+data("ny_noaa")
+ny_noaa
+```
+
+Description of `ny_noaa`: This dataset contain 2595176 observations and 7 variables. For the variables, it records some data about `date`, `precipitation`, `snow fall`, `snow depth` and associated temperature. Multiple missing data (3387623 in total) are really a big issue for the further data analysis works, such as counting, categorizing and visualizing. Specifically, there are 145838 missing data in precipitation, 381221 in snowfall, 591786 in snow depth, 1134358 in tmax, 1134420 in tmin. So we are required to do some tidy and wrangling works for people to easily understand what is going on.
+
+
+
+Clean the data
+
+```{r}
+noaa_df = ny_noaa %>% 
+  janitor::clean_names() %>% 
+  separate(date, into = c("year", "month", "day"), sep = "-") %>%
+  mutate(
+    year = as.numeric(year),
+    day = as.numeric(day),
+    prcp = prcp / 10 ,
+    tmax = as.numeric(tmax) / 10,
+    tmin = as.numeric(tmin) / 10,
+  ) %>% 
+  mutate(month = recode(month,
+          "01" = "January",
+          "02" = "February",
+          "03" = "March",
+          "04" = "April",
+          "05" = "May",
+          "06" = "June",
+          "07" = "July",
+          "08" = "August",
+          "09" = "September",
+          "10" = "October",
+          "11" = "November",
+          "12" = "December"
+    )) %>% 
+  relocate(year, month, day, everything())
+noaa_df
+```
+
+Common observed value finding:
+
+```{r}
+noaa_df %>% 
+  count(snow) %>%
+  arrange(desc(n))
+```
+
+Observations: The most commonly observed value  is 0 for snowfall since snow weather only occurs in winter for about three month in NYC. And NYC is not snowing in most of time.
+
+Make two-panel plot showing the average max temp in Jan and Jul. 
+
+```{r}
+noaa_df %>% 
+  select(id, year, month, tmax) %>%
+  filter(month ==  c("January","July")) %>%
+  group_by(id, year, month) %>% 
+  summarize(mean_tmax = mean(tmax, na.rm = TRUE)) %>% 
+  drop_na(mean_tmax) %>% 
+  ggplot(aes(x = year, y = mean_tmax, color = month)) +
+  geom_point(alpha = .5) +
+  geom_smooth() +
+  labs(
+    title = "Average Maximum Tempreture of Weather Stations Between January and July in NYC",
+    x = "Year",
+    y = "Average Monthly Tempreture (°C)"
+    ) + 
+  theme(legend.position = "right") +
+  facet_grid(. ~ month)
+```
+
+From the plot, we notice the mean maximized temperature has a range from -10 to 10 Celsius degree in January and from 20 to 32 Celsius degree in July. Besides, the temperature fluctuation in Jan is more obvious than in July observed through the trend line in the plot. Also, we notice several outliers. For instance, a station recorded 14 Celsius degree in a certain day of July 1988. And a 14 Celsius degree in a certain day of January 2004.
+
+Making a two panel plot showing:
+(1): `tmax` vs `tmin` for the full dataset
+
+```{r warning=FALSE}
+tmax_tmin_plot = 
+  noaa_df %>%
+  ggplot(aes(x = tmin, y = tmax)) +
+  geom_hex() +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "NY Temperatures From 1981 to 2010",
+    x = "tmin (°C)",
+    y = "tmax (°C)"
+    ) + 
+  theme(legend.position = "right")
+tmax_tmin_plot
+```
+
+(2): Distribution of snowfall from 0 to 100 separately by year.
+
+```{r}
+snow_100_plot =
+  noaa_df %>% 
+  filter(snow > 0 & snow < 100) %>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(x = year, y = snow)) + 
+  geom_violin(aes(fill = year)) +
+  labs(
+    title = "NY Snowfall Values, 0-100mm, 1981-2010",
+    x = "Year",
+    y = "Snowfall (mm)"
+  ) +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "none")
+snow_100_plot
+```
+
+
+Combining two plots by patchwork
+
+```{r warning=FALSE, fig.width = 10, fig.height = 11}
+tmax_tmin_plot / snow_100_plot
+```
+
+Final observation for two-panel plots: For the upper plot `tmax_tmin_plot` is tmax versus tmin based on the full dataset. NYC has a temperature range from 15 to 25 Celsius degree for most of the days and the trend line indicates the linear relationship at the beginning and sigmoidal regression at the middle. For the lower plot `snow_100_plot`, it shows the distribution of snowfall values that are greater than 0 and less than 100 separately by year. The snowfall changes are not obvious from 1981 to 2010. But the number of days with 25mm and 50mm snowfall is slightly decreasing.    
